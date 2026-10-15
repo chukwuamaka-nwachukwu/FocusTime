@@ -1,5 +1,6 @@
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import { useColorScheme } from 'react-native';
+import * as React from "react";
 
 import { Colors } from '@/constants/theme';
 
