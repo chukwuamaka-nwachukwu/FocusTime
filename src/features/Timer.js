@@ -1,3 +1,4 @@
+// features/Timer.js
 
 import React, {
   useCallback,
@@ -15,6 +16,7 @@ import {
   TextInput,
   ActivityIndicator,
   Alert,
+  Image,
 } from "react-native";
 
 import { Ionicons } from "@expo/vector-icons";
@@ -39,12 +41,26 @@ import {
   clearActiveFocusSession,
 } from "../../services/focusService.js";
 
+// =====================================================
+// CONSTANTS
+// =====================================================
+
 const DURATION_OPTIONS = [5, 10, 15, 25, 30, 45, 60];
+
 const DEFAULT_MINUTES = 25;
+
 const KEEP_AWAKE_TAG = "focus-timer";
 
+// =====================================================
+// HELPER FUNCTIONS
+// =====================================================
+
 const formatTime = (totalSeconds) => {
-  const safeSeconds = Math.max(0, Math.floor(totalSeconds));
+  const safeSeconds = Math.max(
+    0,
+    Math.floor(totalSeconds)
+  );
+
   const minutes = Math.floor(safeSeconds / 60);
   const seconds = safeSeconds % 60;
 
@@ -74,43 +90,93 @@ const formatDate = (value) => {
 const createSessionId = () =>
   `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
+// =====================================================
+// TIMER COMPONENT
+// =====================================================
+
 export const Timer = ({
   focusSubject,
   clearSubject,
   onTimerEnd,
 }) => {
+  // ---------------------------------------------------
+  // STATE
+  // ---------------------------------------------------
+
   const [sessionMinutes, setSessionMinutes] =
     useState(DEFAULT_MINUTES);
 
   const [secondsLeft, setSecondsLeft] =
     useState(DEFAULT_MINUTES * 60);
 
-  const [customMinutes, setCustomMinutes] = useState("");
+  const [customMinutes, setCustomMinutes] =
+    useState("");
+
   const [isStarted, setIsStarted] = useState(false);
+
   const [isComplete, setIsComplete] = useState(false);
+
   const [showHistory, setShowHistory] = useState(false);
+
   const [history, setHistory] = useState([]);
+
   const [isLoading, setIsLoading] = useState(true);
+
   const [isSaving, setIsSaving] = useState(false);
+
   const [errorMessage, setErrorMessage] = useState("");
+
   const [saveFailed, setSaveFailed] = useState(false);
-  const [restoredTaskName, setRestoredTaskName] = useState("");
+
+  const [restoredTaskName, setRestoredTaskName] =
+    useState("");
+
+  // ---------------------------------------------------
+  // REFS
+  // ---------------------------------------------------
 
   const mountedRef = useRef(false);
+
   const startedAtRef = useRef(null);
+
   const endAtRef = useRef(null);
+
   const sessionIdRef = useRef(null);
+
   const savedSessionRef = useRef(false);
+
   const pendingSessionRef = useRef(null);
+
+  // Tracks whether this component successfully activated
+  // its keep-awake request.
+  const wakeLockActiveRef = useRef(false);
+
+  // Prevents outdated asynchronous activation requests
+  // from incorrectly releasing a newer wake-lock request.
+  const wakeLockGenerationRef = useRef(0);
+
+  const wakeLockDesiredRef = useRef(false);
+
+  // ---------------------------------------------------
+  // COMPLETION SOUND
+  // ---------------------------------------------------
 
   const completionSound = useAudioPlayer(
     require("../../assets/focus-time.mp3")
   );
 
+  // ---------------------------------------------------
+  // CURRENT TASK
+  // ---------------------------------------------------
+
   const taskName =
     focusSubject?.trim() ||
     restoredTaskName ||
     "Untitled focus task";
+
+  // ---------------------------------------------------
+  // TIMER CALCULATIONS
+  // ---------------------------------------------------
 
   const totalSeconds = sessionMinutes * 60;
 
@@ -125,32 +191,84 @@ export const Timer = ({
         )
       : 0;
 
-  // -----------------------------
-  // KEEP SCREEN AWAKE ONLY WHILE RUNNING
-  // -----------------------------
+  // ===================================================
+  // KEEP SCREEN AWAKE WHILE TIMER IS RUNNING
+  // ===================================================
 
   useEffect(() => {
-    if (isStarted && !isComplete) {
-      activateKeepAwakeAsync(KEEP_AWAKE_TAG).catch(
-        (error) => {
+    const generation = ++wakeLockGenerationRef.current;
+
+    let cancelled = false;
+
+    const shouldKeepAwake = isStarted && !isComplete;
+
+    wakeLockDesiredRef.current = shouldKeepAwake;
+
+    const releaseWakeLock = () => {
+      if (!wakeLockActiveRef.current) {
+        return;
+      }
+
+      try {
+        deactivateKeepAwake(KEEP_AWAKE_TAG);
+      } catch (error) {
+        console.warn(
+          "Could not release the screen wake lock:",
+          error
+        );
+      } finally {
+        wakeLockActiveRef.current = false;
+      }
+    };
+
+    if (shouldKeepAwake) {
+      activateKeepAwakeAsync(KEEP_AWAKE_TAG)
+        .then(() => {
+          // An older activation may finish after the
+          // timer has already been paused or unmounted.
+          if (
+            cancelled ||
+            generation !== wakeLockGenerationRef.current
+          ) {
+            if (!wakeLockDesiredRef.current) {
+              try {
+                deactivateKeepAwake(KEEP_AWAKE_TAG);
+              } catch (error) {
+                console.warn(
+                  "Could not release the outdated wake lock:",
+                  error
+                );
+              } finally {
+                wakeLockActiveRef.current = false;
+              }
+            }
+
+            return;
+          }
+
+          wakeLockActiveRef.current = true;
+        })
+        .catch((error) => {
           console.warn(
             "Could not keep the screen awake:",
             error
           );
-        }
-      );
+        });
     } else {
-      deactivateKeepAwake(KEEP_AWAKE_TAG);
+      releaseWakeLock();
     }
 
     return () => {
-      deactivateKeepAwake(KEEP_AWAKE_TAG);
+      cancelled = true;
+
+      // Release only a wake lock that was confirmed active.
+      releaseWakeLock();
     };
   }, [isStarted, isComplete]);
 
-  // -----------------------------
-  // REFRESH HISTORY
-  // -----------------------------
+  // ===================================================
+  // REFRESH FOCUS HISTORY
+  // ===================================================
 
   const refreshHistory = useCallback(async () => {
     const records = await loadFocusHistory();
@@ -170,7 +288,10 @@ export const Timer = ({
         setErrorMessage("");
       }
     } catch (error) {
-      console.error("Could not refresh focus history:", error);
+      console.error(
+        "Could not refresh focus history:",
+        error
+      );
 
       if (mountedRef.current) {
         setErrorMessage(
@@ -180,9 +301,9 @@ export const Timer = ({
     }
   }, [refreshHistory]);
 
-  // -----------------------------
+  // ===================================================
   // INITIALIZE CLOUD DATA
-  // -----------------------------
+  // ===================================================
 
   useEffect(() => {
     mountedRef.current = true;
@@ -192,12 +313,15 @@ export const Timer = ({
         setIsLoading(true);
         setErrorMessage("");
 
-        const [preferences, records, activeSession] =
-          await Promise.all([
-            loadFocusPreferences(),
-            loadFocusHistory(),
-            loadActiveFocusSession(),
-          ]);
+        const [
+          preferences,
+          records,
+          activeSession,
+        ] = await Promise.all([
+          loadFocusPreferences(),
+          loadFocusHistory(),
+          loadActiveFocusSession(),
+        ]);
 
         if (!mountedRef.current) return;
 
@@ -216,9 +340,12 @@ export const Timer = ({
         setSecondsLeft(validMinutes * 60);
         setHistory(records);
 
+        // Restore an existing running or paused session.
         if (
           activeSession?.sessionId &&
-          ["running", "paused"].includes(activeSession.status)
+          ["running", "paused"].includes(
+            activeSession.status
+          )
         ) {
           const restoredMinutes = Number(
             activeSession.plannedMinutes
@@ -241,7 +368,9 @@ export const Timer = ({
               activeSession.endAt
             ).getTime();
 
-            restoredRemaining = Number.isFinite(endTimestamp)
+            restoredRemaining = Number.isFinite(
+              endTimestamp
+            )
               ? Math.max(
                   0,
                   Math.ceil(
@@ -252,12 +381,15 @@ export const Timer = ({
           } else {
             restoredRemaining = Math.max(
               0,
-              Number(activeSession.remainingSeconds) || 0
+              Number(
+                activeSession.remainingSeconds
+              ) || 0
             );
           }
 
           setSessionMinutes(validRestoredMinutes);
           setSecondsLeft(restoredRemaining);
+
           setRestoredTaskName(
             activeSession.taskName || ""
           );
@@ -266,15 +398,21 @@ export const Timer = ({
             activeSession.startedAt ||
             new Date().toISOString();
 
-          sessionIdRef.current = activeSession.sessionId;
+          sessionIdRef.current =
+            activeSession.sessionId;
+
           savedSessionRef.current = false;
+
+          pendingSessionRef.current = null;
 
           if (activeSession.status === "running") {
             const restoredEndAt = new Date(
               activeSession.endAt
             ).getTime();
 
-            endAtRef.current = Number.isFinite(restoredEndAt)
+            endAtRef.current = Number.isFinite(
+              restoredEndAt
+            )
               ? restoredEndAt
               : Date.now();
 
@@ -309,12 +447,14 @@ export const Timer = ({
     };
   }, []);
 
-  // -----------------------------
+  // ===================================================
   // COUNTDOWN
-  // -----------------------------
+  // ===================================================
 
   useEffect(() => {
-    if (!isStarted) return undefined;
+    if (!isStarted) {
+      return undefined;
+    }
 
     const updateRemaining = () => {
       if (!endAtRef.current) return;
@@ -333,14 +473,17 @@ export const Timer = ({
 
     updateRemaining();
 
-    const interval = setInterval(updateRemaining, 500);
+    const interval = setInterval(
+      updateRemaining,
+      500
+    );
 
     return () => clearInterval(interval);
   }, [isStarted]);
 
-  // -----------------------------
+  // ===================================================
   // SAVE ACTIVE TIMER STATE
-  // -----------------------------
+  // ===================================================
 
   const persistActiveSession = useCallback(
     async (status, remainingSeconds, endAt) => {
@@ -349,7 +492,8 @@ export const Timer = ({
       }
 
       if (!startedAtRef.current) {
-        startedAtRef.current = new Date().toISOString();
+        startedAtRef.current =
+          new Date().toISOString();
       }
 
       try {
@@ -388,9 +532,9 @@ export const Timer = ({
     [taskName, sessionMinutes]
   );
 
-  // -----------------------------
+  // ===================================================
   // COMPLETE AND SAVE SESSION
-  // -----------------------------
+  // ===================================================
 
   const completeAndSaveSession = useCallback(
     async (session) => {
@@ -409,7 +553,8 @@ export const Timer = ({
           sessionId: session.sessionId,
           taskName: session.taskName,
           plannedMinutes: session.plannedMinutes,
-          actualFocusedSeconds: session.actualFocusedSeconds,
+          actualFocusedSeconds:
+            session.actualFocusedSeconds,
           startedAt: session.startedAt,
           completedAt: session.completedAt,
         });
@@ -481,9 +626,9 @@ export const Timer = ({
     [refreshHistory, onTimerEnd]
   );
 
-  // -----------------------------
+  // ===================================================
   // DETECT TIMER COMPLETION
-  // -----------------------------
+  // ===================================================
 
   useEffect(() => {
     if (
@@ -516,7 +661,9 @@ export const Timer = ({
       completedAt,
     };
 
-    sessionIdRef.current = completedSession.sessionId;
+    sessionIdRef.current =
+      completedSession.sessionId;
+
     pendingSessionRef.current = completedSession;
 
     const finishSession = async () => {
@@ -525,7 +672,10 @@ export const Timer = ({
           Haptics.NotificationFeedbackType.Success
         );
       } catch (error) {
-        console.warn("Haptics unavailable:", error);
+        console.warn(
+          "Haptics unavailable:",
+          error
+        );
       }
 
       try {
@@ -538,7 +688,9 @@ export const Timer = ({
         );
       }
 
-      await completeAndSaveSession(completedSession);
+      await completeAndSaveSession(
+        completedSession
+      );
     };
 
     finishSession();
@@ -551,9 +703,9 @@ export const Timer = ({
     completeAndSaveSession,
   ]);
 
-  // -----------------------------
+  // ===================================================
   // RETRY A FAILED SESSION SAVE
-  // -----------------------------
+  // ===================================================
 
   const retrySaveCompletedSession = async () => {
     if (isSaving) return;
@@ -564,19 +716,23 @@ export const Timer = ({
       setErrorMessage(
         "There is no pending session to retry. Check your focus history."
       );
+
       return;
     }
 
     await completeAndSaveSession(pendingSession);
   };
 
-  // -----------------------------
+  // ===================================================
   // START / PAUSE / RESUME
-  // -----------------------------
+  // ===================================================
 
   const handleStartPause = async () => {
-    if (isComplete || isSaving || isLoading) return;
+    if (isComplete || isSaving || isLoading) {
+      return;
+    }
 
+    // PAUSE
     if (isStarted) {
       const remaining = endAtRef.current
         ? Math.max(
@@ -601,12 +757,14 @@ export const Timer = ({
       return;
     }
 
+    // START OR RESUME
     if (secondsLeft <= 0) {
       setSecondsLeft(sessionMinutes * 60);
     }
 
     if (!startedAtRef.current) {
-      startedAtRef.current = new Date().toISOString();
+      startedAtRef.current =
+        new Date().toISOString();
     }
 
     if (!sessionIdRef.current) {
@@ -637,18 +795,20 @@ export const Timer = ({
     );
   };
 
-  // -----------------------------
+  // ===================================================
   // RESET TIMER
-  // -----------------------------
+  // ===================================================
 
   const resetTimer = async () => {
     setIsStarted(false);
     setIsComplete(false);
+
     setSecondsLeft(sessionMinutes * 60);
 
     endAtRef.current = null;
     startedAtRef.current = null;
     sessionIdRef.current = null;
+
     savedSessionRef.current = false;
     pendingSessionRef.current = null;
 
@@ -671,9 +831,9 @@ export const Timer = ({
     }
   };
 
-  // -----------------------------
+  // ===================================================
   // CHANGE DURATION
-  // -----------------------------
+  // ===================================================
 
   const chooseDuration = async (minutes) => {
     if (
@@ -685,14 +845,19 @@ export const Timer = ({
         "Invalid duration",
         "Choose a whole number between 1 and 180 minutes."
       );
+
       return;
     }
 
-    if (isStarted || (progress > 0 && !isComplete)) {
+    if (
+      isStarted ||
+      (progress > 0 && !isComplete)
+    ) {
       Alert.alert(
         "Reset the timer first",
         "Reset your current session before changing its duration."
       );
+
       return;
     }
 
@@ -703,8 +868,10 @@ export const Timer = ({
 
     startedAtRef.current = null;
     sessionIdRef.current = null;
+
     savedSessionRef.current = false;
     pendingSessionRef.current = null;
+
     endAtRef.current = null;
 
     setSaveFailed(false);
@@ -741,15 +908,21 @@ export const Timer = ({
     }
   };
 
+  // ===================================================
+  // START A NEW TASK
+  // ===================================================
+
   const handleNewTask = async () => {
     await resetTimer();
+
     setRestoredTaskName("");
+
     clearSubject?.();
   };
 
-  // -----------------------------
+  // ===================================================
   // HISTORY STATISTICS
-  // -----------------------------
+  // ===================================================
 
   const completedCount = history.filter(
     (item) => item.status === "completed"
@@ -766,9 +939,9 @@ export const Timer = ({
     totalFocusedSeconds / 60
   );
 
-  // -----------------------------
+  // ===================================================
   // LOADING SCREEN
-  // -----------------------------
+  // ===================================================
 
   if (isLoading) {
     return (
@@ -777,6 +950,7 @@ export const Timer = ({
           size="large"
           color={colors.accent}
         />
+
         <Text style={styles.loadingText}>
           Preparing your focus space...
         </Text>
@@ -784,9 +958,9 @@ export const Timer = ({
     );
   }
 
-  // -----------------------------
+  // ===================================================
   // TIMER INTERFACE
-  // -----------------------------
+  // ===================================================
 
   return (
     <ScrollView
@@ -794,9 +968,23 @@ export const Timer = ({
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
+      {/* HEADER */}
+
       <View style={styles.header}>
-        <View>
-          <Text style={styles.brand}>FOCUSTIME</Text>
+        <View style={styles.brandContainer}>
+          <View style={styles.brandRow}>
+            <Image
+              source={require("../../assets/icons/app-icon.png")}
+              style={styles.appIcon}
+              resizeMode="contain"
+              accessibilityLabel="FocusTime app icon"
+            />
+
+            <Text style={styles.brand}>
+              FOCUSTIME
+            </Text>
+          </View>
+
           <Text style={styles.greeting}>
             Make this moment count.
           </Text>
@@ -808,6 +996,8 @@ export const Timer = ({
           </Text>
         </View>
       </View>
+
+      {/* ERROR MESSAGE */}
 
       {!!errorMessage && (
         <View style={styles.errorBox}>
@@ -842,6 +1032,8 @@ export const Timer = ({
         </View>
       )}
 
+      {/* TIMER STATUS */}
+
       <View style={styles.statusRow}>
         <View
           style={[
@@ -866,6 +1058,8 @@ export const Timer = ({
         </Text>
       </View>
 
+      {/* MAIN TIMER CARD */}
+
       <View style={styles.timerCard}>
         <Text style={styles.timerHeading}>
           {isComplete
@@ -889,6 +1083,8 @@ export const Timer = ({
                 : "Take a breath. Let everything else wait."}
         </Text>
 
+        {/* CLOCK */}
+
         <View style={styles.clockFace}>
           <View style={styles.clockInner}>
             <Text style={styles.clockTime}>
@@ -902,6 +1098,8 @@ export const Timer = ({
             </Text>
           </View>
         </View>
+
+        {/* PROGRESS */}
 
         <View style={styles.progressLabels}>
           <Text style={styles.progressTitle}>
@@ -933,6 +1131,8 @@ export const Timer = ({
         </View>
       </View>
 
+      {/* DURATION SELECTION */}
+
       <View style={styles.durationCard}>
         <Text style={styles.sectionTitle}>
           Choose your duration
@@ -955,7 +1155,9 @@ export const Timer = ({
               <Pressable
                 key={minutes}
                 disabled={disabled}
-                onPress={() => chooseDuration(minutes)}
+                onPress={() =>
+                  chooseDuration(minutes)
+                }
                 style={[
                   styles.durationOption,
                   selected && styles.durationSelected,
@@ -975,6 +1177,8 @@ export const Timer = ({
             );
           })}
         </View>
+
+        {/* CUSTOM DURATION */}
 
         <View style={styles.customDurationRow}>
           <TextInput
@@ -1000,6 +1204,7 @@ export const Timer = ({
                   "Invalid duration",
                   "Enter a whole number from 1 to 180."
                 );
+
                 return;
               }
 
@@ -1033,6 +1238,8 @@ export const Timer = ({
         )}
       </View>
 
+      {/* CURRENT TASK */}
+
       <View style={styles.taskCard}>
         <View style={styles.taskIcon}>
           <Ionicons
@@ -1056,8 +1263,12 @@ export const Timer = ({
         </View>
       </View>
 
+      {/* TIMER CONTROLS */}
+
       <View style={styles.controls}>
         <View style={styles.circularControls}>
+          {/* RESET */}
+
           <View style={styles.controlItem}>
             <Pressable
               onPress={resetTimer}
@@ -1080,6 +1291,8 @@ export const Timer = ({
               Reset
             </Text>
           </View>
+
+          {/* START / PAUSE / RESUME */}
 
           <View style={styles.controlItem}>
             <Pressable
@@ -1130,6 +1343,8 @@ export const Timer = ({
             </Text>
           </View>
 
+          {/* NEW TASK */}
+
           <View style={styles.controlItem}>
             <Pressable
               onPress={handleNewTask}
@@ -1155,9 +1370,12 @@ export const Timer = ({
         </View>
       </View>
 
+      {/* FOCUS HISTORY TOGGLE */}
+
       <Pressable
         onPress={() => {
           const nextValue = !showHistory;
+
           setShowHistory(nextValue);
 
           if (nextValue) {
@@ -1188,6 +1406,8 @@ export const Timer = ({
           color={colors.white}
         />
       </Pressable>
+
+      {/* FOCUS HISTORY */}
 
       {showHistory && (
         <View style={styles.historyCard}>
@@ -1273,13 +1493,19 @@ export const Timer = ({
         </View>
       )}
 
+      {/* MOTIVATIONAL QUOTE */}
+
       <View style={styles.motivation}>
-        <Text style={styles.motivationMark}>“</Text>
+        <Text style={styles.motivationMark}>
+          “
+        </Text>
 
         <Text style={styles.motivationText}>
           You don't have to do everything. Just the next thing.
         </Text>
       </View>
+
+      {/* FOOTER */}
 
       <Text style={styles.footer}>
         ONE THING AT A TIME.
@@ -1287,6 +1513,10 @@ export const Timer = ({
     </ScrollView>
   );
 };
+
+// =====================================================
+// STYLES
+// =====================================================
 
 const styles = StyleSheet.create({
   scroll: {
@@ -1314,11 +1544,30 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
 
+  // HEADER
+
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 25,
+    marginTop:60
+  },
+
+  brandContainer: {
+    flexShrink: 1,
+  },
+
+  brandRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+  },
+
+  appIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
   },
 
   brand: {
@@ -1348,6 +1597,8 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "800",
   },
+
+  // ERROR MESSAGE
 
   errorBox: {
     gap: 10,
@@ -1379,6 +1630,8 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
 
+  // STATUS
+
   statusRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1408,6 +1661,8 @@ const styles = StyleSheet.create({
     letterSpacing: 1.3,
   },
 
+  // MAIN TIMER CARD
+
   timerCard: {
     backgroundColor: colors.navy,
     borderRadius: 28,
@@ -1432,6 +1687,8 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 8,
   },
+
+  // CLOCK
 
   clockFace: {
     width: 220,
@@ -1472,6 +1729,8 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
 
+  // PROGRESS
+
   progressLabels: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1509,6 +1768,8 @@ const styles = StyleSheet.create({
     color: "#94A6C1",
     fontSize: 10,
   },
+
+  // DURATION CARD
 
   durationCard: {
     backgroundColor: "#1B2C49",
@@ -1611,6 +1872,8 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
 
+  // CURRENT TASK
+
   taskCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -1648,6 +1911,8 @@ const styles = StyleSheet.create({
     lineHeight: 23,
     fontWeight: "800",
   },
+
+  // TIMER CONTROLS
 
   controls: {
     marginTop: 28,
@@ -1711,6 +1976,8 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
+  // HISTORY TOGGLE
+
   historyToggle: {
     flexDirection: "row",
     alignItems: "center",
@@ -1734,6 +2001,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "800",
   },
+
+  // HISTORY CARD
 
   historyCard: {
     backgroundColor: "#1B2C49",
@@ -1840,6 +2109,8 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
+  // MOTIVATION
+
   motivation: {
     alignItems: "center",
     marginTop: 26,
@@ -1860,6 +2131,8 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontStyle: "italic",
   },
+
+  // FOOTER
 
   footer: {
     color: "#7185A3",

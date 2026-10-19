@@ -10,19 +10,33 @@ import {
   query,
   serverTimestamp,
   setDoc,
+  Timestamp,
 } from "firebase/firestore";
 
-import { db, ensureAnonymousUser } from "../firebase/firebase";
+import {
+  db,
+  ensureAnonymousUser,
+} from "../firebase/firebase";
+
+// =====================================================
+// DEFAULTS
+// =====================================================
 
 const DEFAULT_PREFERENCES = {
   sessionMinutes: 25,
 };
 
+// =====================================================
+// USER REFERENCES
+// =====================================================
+
 async function getUserRef() {
   const user = await ensureAnonymousUser();
 
   if (!user?.uid) {
-    throw new Error("Firebase anonymous authentication is not ready.");
+    throw new Error(
+      "Firebase authentication is not ready. Please try again."
+    );
   }
 
   return {
@@ -34,22 +48,80 @@ async function getUserRef() {
 async function getPreferencesRef() {
   const { userRef } = await getUserRef();
 
-  return doc(userRef, "settings", "preferences");
+  return doc(
+    userRef,
+    "settings",
+    "preferences"
+  );
 }
 
 async function getActiveSessionRef() {
   const { userRef } = await getUserRef();
 
-  return doc(userRef, "state", "activeSession");
+  return doc(
+    userRef,
+    "state",
+    "activeSession"
+  );
 }
 
-// -----------------------------
+// =====================================================
+// HELPERS
+// =====================================================
+
+function normalizeDate(value) {
+  if (!value) return null;
+
+  if (typeof value.toDate === "function") {
+    return value.toDate().toISOString();
+  }
+
+  const date = new Date(value);
+
+  return Number.isNaN(date.getTime())
+    ? null
+    : date.toISOString();
+}
+
+function toFirestoreTimestamp(value) {
+  const normalized = normalizeDate(value);
+
+  if (!normalized) {
+    throw new Error("A valid date is required.");
+  }
+
+  return Timestamp.fromDate(
+    new Date(normalized)
+  );
+}
+
+function validateMinutes(value) {
+  const minutes = Number(value);
+
+  if (
+    !Number.isInteger(minutes) ||
+    minutes < 1 ||
+    minutes > 180
+  ) {
+    throw new Error(
+      "Duration must be a whole number between 1 and 180 minutes."
+    );
+  }
+
+  return minutes;
+}
+
+// =====================================================
 // DURATION PREFERENCES
-// -----------------------------
+// =====================================================
 
 export async function loadFocusPreferences() {
-  const preferencesRef = await getPreferencesRef();
-  const snapshot = await getDoc(preferencesRef);
+  const preferencesRef =
+    await getPreferencesRef();
+
+  const snapshot = await getDoc(
+    preferencesRef
+  );
 
   if (!snapshot.exists()) {
     await setDoc(preferencesRef, {
@@ -61,44 +133,55 @@ export async function loadFocusPreferences() {
   }
 
   const data = snapshot.data();
-  const minutes = Number(data.sessionMinutes);
+
+  let sessionMinutes;
+
+  try {
+    sessionMinutes = validateMinutes(
+      data.sessionMinutes
+    );
+  } catch {
+    sessionMinutes =
+      DEFAULT_PREFERENCES.sessionMinutes;
+  }
 
   return {
-    sessionMinutes:
-      Number.isInteger(minutes) &&
-      minutes >= 1 &&
-      minutes <= 180
-        ? minutes
-        : DEFAULT_PREFERENCES.sessionMinutes,
+    sessionMinutes,
   };
 }
 
-export async function saveFocusPreferences(sessionMinutes) {
-  const minutes = Number(sessionMinutes);
+export async function saveFocusPreferences(
+  sessionMinutes
+) {
+  const minutes = validateMinutes(
+    sessionMinutes
+  );
 
-  if (
-    !Number.isInteger(minutes) ||
-    minutes < 1 ||
-    minutes > 180
-  ) {
-    throw new Error("Duration must be between 1 and 180 minutes.");
-  }
+  const { user, userRef } =
+    await getUserRef();
 
-  const preferencesRef = await getPreferencesRef();
+  const preferencesRef = doc(
+    userRef,
+    "settings",
+    "preferences"
+  );
 
   await setDoc(
     preferencesRef,
     {
+      userId: user.uid,
       sessionMinutes: minutes,
       updatedAt: serverTimestamp(),
     },
     { merge: true }
   );
+
+  return true;
 }
 
-// -----------------------------
+// =====================================================
 // COMPLETED FOCUS SESSIONS
-// -----------------------------
+// =====================================================
 
 export async function saveFocusSession({
   id,
@@ -109,55 +192,90 @@ export async function saveFocusSession({
   startedAt,
   completedAt,
 }) {
-  const { user, userRef } = await getUserRef();
+  const { user, userRef } =
+    await getUserRef();
 
-  // Reuse the session ID when retrying a save.
-  // This prevents duplicate history records.
-  const stableId =
-    sessionId || id || `${Date.now()}-${user.uid}`;
+  const stableId = String(
+    sessionId || id || ""
+  ).trim();
 
-  const minutes = Number(plannedMinutes);
-  const focusedSeconds = Number(actualFocusedSeconds);
+  if (!stableId) {
+    throw new Error(
+      "A session ID is required to save focus history."
+    );
+  }
+
+  const minutes = validateMinutes(
+    plannedMinutes
+  );
+
+  const focusedSeconds = Number(
+    actualFocusedSeconds
+  );
 
   if (
-    !Number.isFinite(minutes) ||
-    minutes < 1 ||
     !Number.isFinite(focusedSeconds) ||
     focusedSeconds < 0
   ) {
-    throw new Error("The focus session contains invalid duration data.");
+    throw new Error(
+      "The focused duration is invalid."
+    );
   }
 
+  const startedTimestamp =
+    toFirestoreTimestamp(startedAt);
+
+  const completedTimestamp =
+    toFirestoreTimestamp(completedAt);
+
+  const sessionsRef = collection(
+    userRef,
+    "focusSessions"
+  );
+
+  // Stable ID prevents duplicate records on retry.
   const sessionRef = doc(
-    collection(userRef, "focusSessions"),
+    sessionsRef,
     stableId
   );
 
-  const session = {
-    uid: user.uid,
-    taskName: String(
-      taskName || "Untitled focus task"
-    ).trim(),
-    plannedMinutes: minutes,
-    actualFocusedSeconds: focusedSeconds,
-    startedAt: startedAt || new Date().toISOString(),
-    completedAt: completedAt || new Date().toISOString(),
-    status: "completed",
-    createdAt: serverTimestamp(),
-  };
-
-  // setDoc with a stable document ID makes retries safe.
-  await setDoc(sessionRef, session, { merge: true });
+  await setDoc(
+    sessionRef,
+    {
+      id: stableId,
+      sessionId: stableId,
+      userId: user.uid,
+      taskName:
+        String(
+          taskName || "Untitled focus task"
+        ).trim() ||
+        "Untitled focus task",
+      plannedMinutes: minutes,
+      actualFocusedSeconds: Math.floor(
+        focusedSeconds
+      ),
+      startedAt: startedTimestamp,
+      completedAt: completedTimestamp,
+      status: "completed",
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
 
   return {
     id: stableId,
-    ...session,
+    sessionId: stableId,
+    saved: true,
   };
 }
 
 export async function loadFocusHistory() {
   const { userRef } = await getUserRef();
-  const sessionsRef = collection(userRef, "focusSessions");
+
+  const sessionsRef = collection(
+    userRef,
+    "focusSessions"
+  );
 
   const historyQuery = query(
     sessionsRef,
@@ -165,68 +283,129 @@ export async function loadFocusHistory() {
     limit(100)
   );
 
-  const snapshot = await getDocs(historyQuery);
+  const snapshot = await getDocs(
+    historyQuery
+  );
 
   return snapshot.docs.map((item) => {
     const data = item.data();
 
-    const normalizeDate = (value) => {
-      if (!value) return null;
-
-      if (typeof value.toDate === "function") {
-        return value.toDate().toISOString();
-      }
-
-      if (value instanceof Date) {
-        return value.toISOString();
-      }
-
-      return value;
-    };
-
     return {
       ...data,
       id: item.id,
-      startedAt: normalizeDate(data.startedAt),
-      completedAt: normalizeDate(data.completedAt),
+      sessionId:
+        data.sessionId || item.id,
+      startedAt: normalizeDate(
+        data.startedAt
+      ),
+      completedAt: normalizeDate(
+        data.completedAt
+      ),
     };
   });
 }
 
-// -----------------------------
+// =====================================================
 // ACTIVE TIMER STATE
-// -----------------------------
+// =====================================================
 
-export async function saveActiveFocusSession(session) {
+export async function saveActiveFocusSession(
+  session
+) {
   if (!session?.sessionId) {
-    throw new Error("An active session ID is required.");
+    throw new Error(
+      "An active session ID is required."
+    );
   }
 
-  const activeSessionRef = await getActiveSessionRef();
+  const minutes = validateMinutes(
+    session.plannedMinutes
+  );
+
+  const remainingSeconds = Math.max(
+    0,
+    Math.floor(
+      Number(session.remainingSeconds) || 0
+    )
+  );
+
+  if (
+    !["running", "paused"].includes(
+      session.status
+    )
+  ) {
+    throw new Error(
+      "Active session status must be running or paused."
+    );
+  }
+
+  const { user, userRef } =
+    await getUserRef();
+
+  const activeSessionRef = doc(
+    userRef,
+    "state",
+    "activeSession"
+  );
 
   await setDoc(
     activeSessionRef,
     {
-      ...session,
+      userId: user.uid,
+      sessionId: String(session.sessionId),
+      taskName:
+        String(
+          session.taskName ||
+            "Untitled focus task"
+        ).trim() ||
+        "Untitled focus task",
+      plannedMinutes: minutes,
+      remainingSeconds,
+      status: session.status,
+      startedAt: normalizeDate(
+        session.startedAt
+      ),
+      endAt: normalizeDate(
+        session.endAt
+      ),
       updatedAt: serverTimestamp(),
     },
     { merge: true }
   );
+
+  return true;
 }
 
 export async function loadActiveFocusSession() {
-  const activeSessionRef = await getActiveSessionRef();
-  const snapshot = await getDoc(activeSessionRef);
+  const activeSessionRef =
+    await getActiveSessionRef();
+
+  const snapshot = await getDoc(
+    activeSessionRef
+  );
 
   if (!snapshot.exists()) {
     return null;
   }
 
-  return snapshot.data();
+  const data = snapshot.data();
+
+  return {
+    ...data,
+    startedAt: normalizeDate(
+      data.startedAt
+    ),
+    endAt: normalizeDate(
+      data.endAt
+    ),
+  };
 }
 
 export async function clearActiveFocusSession() {
-  const activeSessionRef = await getActiveSessionRef();
+  const activeSessionRef =
+    await getActiveSessionRef();
 
   await deleteDoc(activeSessionRef);
+
+  return true;
 }

@@ -1,5 +1,8 @@
 
+// features/Focus.js
+
 import React, { useState } from "react";
+
 import {
   View,
   Text,
@@ -8,11 +11,15 @@ import {
   Platform,
   Keyboard,
   ScrollView,
+  Image,
 } from "react-native";
 
 import { TextInput } from "react-native-paper";
 
+import logo from "../../assets/icons/app-icon.png";
+
 import { colors } from "../utils/colors";
+
 import { RoundedButton } from "../components/RoundedButton";
 
 export const Focus = ({ addSubject }) => {
@@ -28,7 +35,9 @@ export const Focus = ({ addSubject }) => {
     }
 
     Keyboard.dismiss();
+
     addSubject(trimmedSubject);
+
     setSubject("");
     setError("");
   };
@@ -43,9 +52,15 @@ export const Focus = ({ addSubject }) => {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
+        {/* Logo and branding */}
         <View style={styles.topSection}>
-          <View style={styles.logo}>
-            <Text style={styles.logoText}>F</Text>
+          <View style={styles.logoContainer}>
+            <Image
+              source={logo}
+              style={styles.logo}
+              resizeMode="contain"
+              accessibilityLabel="FocusTime app logo"
+            />
           </View>
 
           <Text style={styles.brand}>FOCUSTIME</Text>
@@ -55,6 +70,7 @@ export const Focus = ({ addSubject }) => {
           </Text>
         </View>
 
+        {/* Welcome message */}
         <View style={styles.hero}>
           <Text style={styles.heading}>
             Make room for{"\n"}
@@ -65,10 +81,12 @@ export const Focus = ({ addSubject }) => {
 
           <Text style={styles.description}>
             One task. One session. Your full attention.
-            {"\n"}Let's make today count.
+            {"\n"}
+            Let's make today count.
           </Text>
         </View>
 
+        {/* Task input card */}
         <View style={styles.formCard}>
           <Text style={styles.formTitle}>
             What are we focusing on?
@@ -123,6 +141,7 @@ export const Focus = ({ addSubject }) => {
             style={styles.startButton}
           />
 
+          {/* Session reminder */}
           <View style={styles.sessionNote}>
             <Text style={styles.noteIcon}>◷</Text>
 
@@ -132,6 +151,7 @@ export const Focus = ({ addSubject }) => {
           </View>
         </View>
 
+        {/* Footer */}
         <View style={styles.bottomSection}>
           <View style={styles.dot} />
 
@@ -148,7 +168,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     width: "100%",
-    marginTop:40
+    marginTop: 40,
   },
 
   scrollContent: {
@@ -164,20 +184,20 @@ const styles = StyleSheet.create({
     paddingTop: 6,
   },
 
-  logo: {
-    width: 48,
-    height: 48,
+  logoContainer: {
+    width: 100,
+    height: 100,
     borderRadius: 16,
-    backgroundColor: colors.lightBlue,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 10,
+    marginTop: 10,
   },
 
-  logoText: {
-    fontSize: 27,
-    fontWeight: "900",
-    color: colors.white,
+  logo: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 16,
   },
 
   brand: {
@@ -206,12 +226,12 @@ const styles = StyleSheet.create({
     lineHeight: 44,
     fontWeight: "800",
     letterSpacing: -1.2,
-    textAlign:"center"
+    textAlign: "center",
   },
 
   headingAccent: {
     color: colors.accent,
-    textAlign:"center"
+    textAlign: "center",
   },
 
   description: {
@@ -219,7 +239,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 23,
     marginTop: 14,
-    textAlign:"center"
+    textAlign: "center",
   },
 
   formCard: {
@@ -237,7 +257,7 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 19,
     fontWeight: "800",
-    textAlign:"center"
+    textAlign: "center",
   },
 
   formSubtitle: {
@@ -246,7 +266,7 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     marginTop: 7,
     marginBottom: 20,
-    textAlign:"center"
+    textAlign: "center",
   },
 
   input: {

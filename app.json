@@ -1,39 +1,49 @@
+
 {
   "expo": {
-    "name": "focustime",
+    "name": "FocusTime",
     "slug": "focustime",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/icons/app-icon-square.png",
     "scheme": "focustime",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "supportsTablet": true,
+      "bundleIdentifier": "com.chukwuamaka.focustime"
     },
     "android": {
+      "package": "com.chukwuamaka.focustime",
+      "versionCode": 1,
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "backgroundColor": "#0A2540",
+        "foregroundImage": "./assets/icons/app-icon-square.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "android.permission.ACCESS_NOTIFICATION_POLICY"
+      ]
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/icons/app-icon-square.png"
     },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
-          "image": "./assets/images/splash-icon.png",
+          "backgroundColor": "#0A2540",
+          "image": "./assets/icons/app-icon-square.png",
           "imageWidth": 76
         }
       ],
-      "expo-audio"
+      "expo-audio",
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true,
@@ -45,6 +55,12 @@
         "projectId": "e9dcbc83-5f35-41ef-a0a3-92a8aba4be9e"
       }
     },
-    "owner": "chukwuamakas-team"
+    "owner": "chukwuamakas-team",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/e9dcbc83-5f35-41ef-a0a3-92a8aba4be9e"
+    }
   }
 }
