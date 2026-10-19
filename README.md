@@ -1,61 +1,49 @@
-<<<<<<< HEAD
-# Welcome to your Expo app 👋
+**FocusTime ⏱️**
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+_Make this moment count._
 
-## Get started
+_FocusTime_ is a productivity and time-management mobile application built with React Native and Expo. It helps users dedicate time to meaningful tasks, manage focus sessions, and track their productivity over time.
 
-1. Install dependencies
+With a clean interface, customizable timers, and Firebase integration, FocusTime aims to make building productive habits simple and accessible.
 
-   ```bash
-   npm install
-   ```
+Project status: In development.
 
-2. Start the app
+**✨ Features**
+**
+⏱️ Focus Timer**
 
-   ```bash
-   npx expo start
-   ```
+Start and complete dedicated focus sessions.
 
-In the output, you'll find options to open the app in a
+Choose from preset durations: 5, 10, 15, 25, 30, 45, and 60 minutes.
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+Set a custom focus duration from 1 to 180 minutes.
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+Enter a subject or task before starting a session.
 
-## Get a fresh project
+Track countdown progress and session completion.
 
-When you're ready, run:
+Use a simple, distraction-conscious interface.
 
-```bash
-npm run reset-project
-```
+**☁️ Firebase Integration**
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Firebase Authentication.
 
-### Other setup steps
+Cloud Firestore integration for focus-session data.
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+Save user preferences.
 
-## Learn more
+Record focus-session history.
 
-To learn more about developing your project with Expo, look at the following resources:
+Track planned duration, actual focused time, and session timestamps.
+**
+🎨 User Experience**
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+Modern mobile interface.
 
-## Join the community
+FocusTime branding and a clean timer screen.
 
-Join our community of developers creating universal apps.
+Haptic feedback and audio support where available.
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
-=======
-# FocusTime
-FocusTime is an app built to enable users to focus on achieving a goal in a few minutes. It's built using React Native, JavaScript, Firebase and Expo
->>>>>>> 5918554cb68bdc2c15ff75b99e931fe2f795a454
+Screen-awake support during focus sessions.
+
+File-based navigation with Expo Router.
