@@ -12,38 +12,37 @@ Project status: In development.
 **
 ⏱️ Focus Timer**
 
-Start and complete dedicated focus sessions.
+- Start and complete dedicated focus sessions.
 
-Choose from preset durations: 5, 10, 15, 25, 30, 45, and 60 minutes.
+- Choose from preset durations: 5, 10, 15, 25, 30, 45, and 60 minutes.
 
-Set a custom focus duration from 1 to 180 minutes.
+- Set a custom focus duration from 1 to 180 minutes.
 
-Enter a subject or task before starting a session.
+- Enter a subject or task before starting a session.
 
-Track countdown progress and session completion.
+- Track countdown progress and session completion.
 
-Use a simple, distraction-conscious interface.
+- Use a simple, distraction-conscious interface.
 
 **☁️ Firebase Integration**
+- Firebase Authentication.
 
-Firebase Authentication.
+- Cloud Firestore integration for focus-session data.
 
-Cloud Firestore integration for focus-session data.
+- Save user preferences.
 
-Save user preferences.
+- Record focus-session history.
 
-Record focus-session history.
-
-Track planned duration, actual focused time, and session timestamps.
+- Track planned duration, actual focused time, and session timestamps.
 **
 🎨 User Experience**
 
-Modern mobile interface.
+- Modern mobile interface.
 
-FocusTime branding and a clean timer screen.
+- FocusTime branding and a clean timer screen.
 
-Haptic feedback and audio support where available.
+- Haptic feedback and audio support where available.
 
-Screen-awake support during focus sessions.
+- Screen-awake support during focus sessions.
 
-File-based navigation with Expo Router.
+- File-based navigation with Expo Router.
